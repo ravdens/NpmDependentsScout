@@ -17,6 +17,7 @@ class Package:
     dependents: List[str]
     version: Optional[str] = None
     author: Optional[str] = None
+    author_email: Optional[str] = None
     lastPublished: Optional[str] = None
     weeklyDownloads: Optional[int] = -1
     lastCheckedOn: str = ""  # Date when script checked
@@ -151,17 +152,6 @@ def get_authors(soup):
                 authors.append(Author(username=username, url=href, imageUrl=image_url, lastCheckedOn=str(int(time.time()))))
     return authors
 
-def inspect_authors(authors):
-    #TODO: scrape author details
-    if authors is None:
-        print(Fore.RED + "No authors found." + Style.RESET_ALL)
-        return
-    for author in authors:
-        cli_middle(f"Author: {author.username}")
-        cli_middle(f"URL: {author.url}")
-        cli_middle(f"Image URL: {author.imageUrl}")
-        cli_middle(f"Last Checked: {author.lastCheckedOn}")
-
 #TODO: more logging incase something breaks?
 def get_maintainers(package_name):
     url = f"https://registry.npmjs.org/{package_name}"
@@ -233,11 +223,16 @@ def get_dependents(soup):
 
             else:
                 for dep in deps:
-                    dep_link = dep.get('href').split('/')[-1]
+                    dep_link = dep.get('href')
                     dep_name = dep.get_text()
                     recorded_dependents.append(Package(name=dep_name, url=dep_link, dependents=[], lastCheckedOn=str(int(time.time()))))
 
     return recorded_dependents
+
+@dataclass
+class Holder:
+    package: Package
+    complete: bool
 
 def get_more_dependents(soup):
     recorded_dependents = []
@@ -248,10 +243,25 @@ def get_more_dependents(soup):
         ul_dependents = dependents_list.find_next('ul')
         if ul_dependents:
             deps = ul_dependents.find_all('a')
+
+            holder = Holder(None, False)
             for dep in deps:
-                dep_link = dep.get('href').split('/')[-1]
-                dep_name = dep.find('h3').get_text() if dep.find('h3') else None
-                recorded_dependents.append(Package(name=dep_name, url=dep_link, dependents=[], lastCheckedOn=str(int(time.time()))))
+                dep_link = dep.get('href')
+                dep_name = None
+                if dep.find('h3'):
+                    dep_name = dep.find('h3').get_text()
+                    holder.package = Package(name=dep_name, url=dep_link, dependents=[], lastCheckedOn=str(int(time.time())))
+                else:
+                    dep_name = dep.get_text()
+                    if holder.package:
+                        holder.package.author = dep_name
+                        holder.package.author_email = dep_link
+                        holder.complete = True
+
+                # Check if we have a complete package. Reset property once saved/appended.
+                if holder.complete == True:
+                    recorded_dependents.append(holder.package)
+                    holder = Holder(None, False)
 
     # Check if there's more dependents than listed on the page
     a_elements = soup.find_all(class_="a")
@@ -279,6 +289,27 @@ def consolidate_packages(new_packages, known_packages):
                 break
     return new_packages
 
+# endregion 
+
+# region Inspection Functions
+
+def inspect_authors(authors):
+    #TODO: scrape author details
+    if authors is None:
+        print(Fore.RED + "No authors found." + Style.RESET_ALL)
+        return
+    for author in authors:
+        cli_middle(f"Author: {author.username}")
+        cli_middle(f"URL: {author.url}")
+        cli_middle(f"Image URL: {author.imageUrl}")
+        cli_middle(f"Last Checked: {author.lastCheckedOn}")
+
+def inspect_dependents(dependents):
+    for dependent in dependents:
+        cli_middle(f"Dependent: {dependent.name} /// URL: {dependent.url}")
+
+    cli_middle(f"Total dependents: {len(dependents)}")
+
 # endregion
 
 
@@ -304,7 +335,9 @@ def main():
         if weekly_downloads:
             cli_middle(f"Weekly downloads: {weekly_downloads}")
 
-        get_dependents(soup)
+        dependends = get_dependents(soup)
+
+        inspect_dependents(dependends)
 
     else:
         print(Fore.RED + "Failed to retrieve the webpage." + Style.RESET_ALL)
