@@ -2,12 +2,16 @@ import colorama
 from colorama import Fore, Style
 from bs4 import BeautifulSoup
 import requests
-from dataclasses import dataclass
+from dataclasses import dataclass, asdict
 from typing import List, Optional
 import configparser
+import logging
 import time
 import pdb
+import json
+import os
 
+logging.basicConfig(level=logging.INFO)
 
 # region Package Class
 @dataclass
@@ -21,6 +25,33 @@ class Package:
     lastPublished: Optional[str] = None
     weeklyDownloads: Optional[int] = -1
     lastCheckedOn: str = ""  # Date when script checked
+
+    @staticmethod
+    def desearialize(data):
+        if type(data) != list:
+            return []
+        items_loaded = []
+        for item in data:
+            version = item.get('version', None)
+            author = item.get('author', None)
+            author_email = item.get('author_email', None)
+            lastPublished = item.get('lastPublished', None)
+            weeklyDownloads = item.get('weeklyDownloads', -1)
+
+            items_loaded.append(Package(
+                name=item.get("name"),
+                url=item.get("url"),
+                dependents=item.get("dependents"),
+                version=version,
+                author=author,
+                author_email=author_email,
+                lastPublished=lastPublished,
+                weeklyDownloads=weeklyDownloads,
+                lastCheckedOn=item.get("lastCheckedOn")
+            ))
+
+        return items_loaded
+
 
     def __eq__(self, other):
         if isinstance(other, Package):
@@ -40,6 +71,36 @@ class Author:
     monthlyDownloads: int = 0
     weeklyDownloads: int = 0
     depenents: int = 0
+
+    @staticmethod
+    def desearialize(data):
+        if type(data) != list:
+            return []
+        items_loaded = []
+        for item in data:
+            name = item.get('name', None)
+            username = item.get('username', None)
+            email = item.get('email', None)
+            lastCheckedOn = item.get('lastCheckedOn', None)
+            url = item.get('url', None)
+            imageUrl = item.get('imageUrl', None)
+
+            items_loaded.append(
+                Author(
+                    name=name,
+                    username=username,
+                    email=email,
+                    packageCount=item.get("packageCount"),
+                    lastCheckedOn=lastCheckedOn,
+                    url=url,
+                    imageUrl=imageUrl,
+                    is_maintainer=item.get("is_maintainer"),
+                    monthlyDownloads=item.get("monthlyDownloads"),
+                    weeklyDownloads=item.get("weeklyDownloads"),
+                    depenents=item.get("depenents")
+                )
+            )
+        return items_loaded
 
 @dataclass
 class Settings:
@@ -113,7 +174,7 @@ def fetch_website_content(url):
     if response.status_code == 200:
         return response.text
     else:
-        print(Fore.RED + f"Failed to fetch website: {url}." + Style.RESET_ALL)
+        logging.error(Fore.RED + f"Failed to fetch website: {url}." + Style.RESET_ALL)
         return None
 
 def parse_html(html_content):
@@ -131,26 +192,9 @@ def get_weekly_downloads(package_name):
         data = response.json()
         return data.get('downloads', 0)
     else:
-        print(Fore.RED + f"Failed to fetch weekly downloads for {package_name}." + Style.RESET_ALL)
+        logging.error(Fore.RED + f"Failed to fetch weekly downloads for {package_name}." + Style.RESET_ALL)
         return 0
 
-@DeprecationWarning
-def get_authors(soup):
-    authors = []
-    collaborators = soup.find(id="collaborators")
-    if collaborators:
-        ul_collaborators = collaborators.find_next('ul')
-        if ul_collaborators:
-            links = ul_collaborators.find_all('a')
-            for link in links:
-                print("++++")
-                print(f"link: {link}")
-                href = link.get('href')
-                username = href.split('/~')[-1] if '/~' in href else ''
-                img = link.find('img')
-                image_url = img.get('src') if img else ''
-                authors.append(Author(username=username, url=href, imageUrl=image_url, lastCheckedOn=str(int(time.time()))))
-    return authors
 
 #TODO: more logging incase something breaks?
 def get_maintainers(package_name):
@@ -188,7 +232,7 @@ def get_maintainers(package_name):
 
         return authors
     else:
-        print(Fore.RED + f"Failed to fetch weekly downloads for {package_name}." + Style.RESET_ALL)
+        logging.error(Fore.RED + f"Failed to fetch weekly downloads for {package_name}." + Style.RESET_ALL)
         return 0
 
 def get_download_count(package_name):
@@ -198,7 +242,7 @@ def get_download_count(package_name):
         data = response.json()
         return data.get('downloads', 0)
     else:
-        print(Fore.RED + f"Failed to fetch download count for {package_name}." + Style.RESET_ALL)
+        logging.error(Fore.RED + f"Failed to fetch download count for {package_name}." + Style.RESET_ALL)
         return 0
 
 def get_dependents(soup):
@@ -219,7 +263,7 @@ def get_dependents(soup):
                     return more_dependents
 
                 #TODO: increase logging
-                print(Fore.RED + f"Failed to fetch extended dependents for package." + Style.RESET_ALL)
+                logging.error(Fore.RED + f"Failed to fetch extended dependents for package." + Style.RESET_ALL)
 
             else:
                 for dep in deps:
@@ -229,6 +273,9 @@ def get_dependents(soup):
 
     return recorded_dependents
 
+"""
+  Fast holder class used like tuple for cleaner calculations and pairing of relevant data in get_more_dependents()
+"""
 @dataclass
 class Holder:
     package: Package
@@ -276,7 +323,7 @@ def get_more_dependents(soup):
                 break
         
     if len(recorded_dependents) == 0:
-        print(Fore.RED + f"No dependents found. Something went wrong." + Style.RESET_ALL)
+        logging.error(Fore.RED + f"No dependents found. Something went wrong." + Style.RESET_ALL)
 
     return recorded_dependents
 
@@ -291,12 +338,12 @@ def consolidate_packages(new_packages, known_packages):
 
 # endregion 
 
-# region Inspection Functions
+# region Inspection Display Functions
 
 def inspect_authors(authors):
     #TODO: scrape author details
     if authors is None:
-        print(Fore.RED + "No authors found." + Style.RESET_ALL)
+        logging.error(Fore.RED + "No authors found." + Style.RESET_ALL)
         return
     for author in authors:
         cli_middle(f"Author: {author.username}")
@@ -312,6 +359,27 @@ def inspect_dependents(dependents):
 
 # endregion
 
+# region Utility Functions
+def save_data(data, filename=None):
+    """Save data to a JSON file."""
+    filename = f"data_{filename}.json"
+    with open(filename, 'w') as f_write:
+        json.dump([asdict(item) for item in data], f_write, indent=4)
+    cli_middle(f"Data saved to {filename}")
+
+def load_data(filename):
+    """Load data from a JSON file."""
+    filename = f"data_{filename}.json"
+    if not os.path.exists(filename):
+        logging.warning(f"File not found: {filename}")
+        return []
+    with open(filename, 'r') as file_read:
+        data = json.load(file_read)
+
+    return data
+
+# endregion
+
 
 def main():
 
@@ -321,12 +389,14 @@ def main():
     global settings
     settings = get_settings()
 
+    saved_contributors = Author.desearialize(load_data("contributors"))
+    saved_dependents = Package.desearialize(load_data("dependents"))
+
     cli_webpage(settings.npmUrl)
 
     html_content = fetch_website_content(settings.npmUrl)
     if html_content:
         soup = parse_html(html_content)
-        #print_title(soup)
 
         contributors = get_maintainers(settings.npnStartPackage)
         inspect_authors(contributors)
@@ -339,8 +409,12 @@ def main():
 
         inspect_dependents(dependends)
 
+        save_data(contributors, "contributors")
+        save_data(dependends, "dependents")
+
+
     else:
-        print(Fore.RED + "Failed to retrieve the webpage." + Style.RESET_ALL)
+        logging.error(Fore.RED + "Failed to retrieve the webpage." + Style.RESET_ALL)
 
     cli_footer()
 

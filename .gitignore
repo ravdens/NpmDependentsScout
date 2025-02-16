@@ -2,3 +2,4 @@ config.ini
 exploreVenv/
 start.bat
 start.sh
+*.json
