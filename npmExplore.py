@@ -312,9 +312,9 @@ def get_more_dependents(soup):
 
     # Check if there's more dependents than listed on the page
     a_items = soup.find_all('a')
-    for a in a_items:
-        if a.get_text() == "Next Page":
-            next_page_url = a.get('href')
+    for a_element in a_items:
+        if a_element.get_text() == "Next Page":
+            next_page_url = a_element.get('href')
             next_page_html_content = fetch_website_content(settings.npmBaseUrl + next_page_url)
             if next_page_html_content:
                 next_page_soup = parse_html(next_page_html_content)
