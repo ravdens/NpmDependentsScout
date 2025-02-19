@@ -311,10 +311,10 @@ def get_more_dependents(soup):
                     holder = Holder(None, False)
 
     # Check if there's more dependents than listed on the page
-    a_elements = soup.find_all(class_="a")
-    for element in a_elements:
-        if page.get_text() == "Next Page":
-            next_page_url = page.get('href')
+    a_items = soup.find_all('a')
+    for a_element in a_items:
+        if a_element.get_text() == "Next Page":
+            next_page_url = a_element.get('href')
             next_page_html_content = fetch_website_content(settings.npmBaseUrl + next_page_url)
             if next_page_html_content:
                 next_page_soup = parse_html(next_page_html_content)
@@ -406,8 +406,6 @@ def main():
             cli_middle(f"Weekly downloads: {weekly_downloads}")
 
         dependends = get_dependents(soup)
-
-        inspect_dependents(dependends)
 
         save_data(contributors, "contributors")
         save_data(dependends, "dependents")
