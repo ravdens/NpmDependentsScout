@@ -18,6 +18,7 @@ logging.basicConfig(level=logging.INFO)
 class Package:
     name: str
     url: str
+    sourced_from: List[str]
     dependents: List[str]
     version: Optional[str] = None
     author: Optional[str] = None
@@ -41,6 +42,7 @@ class Package:
             items_loaded.append(Package(
                 name=item.get("name"),
                 url=item.get("url"),
+                sourced_from=item.get("sourced_from"),
                 dependents=item.get("dependents"),
                 version=version,
                 author=author,
@@ -244,9 +246,19 @@ def get_download_count(package_name):
     else:
         logging.error(Fore.RED + f"Failed to fetch download count for {package_name}." + Style.RESET_ALL)
         return 0
+    
+def get_current_source_package(soup):
+    current_url = soup.find('meta', property='og:url')
+    if current_url:
+        whole_url = current_url['content']
+        if "package/" in whole_url:
+            return whole_url.split("package/")[1]
+    logging.error(Fore.RED + f"Failed to determine current source package being examined. We've gotten lost." + Style.RESET_ALL)
+    return None
 
 def get_dependents(soup):
     recorded_dependents = []
+    source_package = get_current_source_package(soup)
     dependents_list = soup.find(id="tabpanel-dependents")
     if dependents_list:
         ul_dependents = dependents_list.find_next('ul')
@@ -259,7 +271,7 @@ def get_dependents(soup):
                 dep_html_content = fetch_website_content(settings.npmBaseUrl + dep_url)
                 if dep_html_content:
                     more_soup = parse_html(dep_html_content)
-                    more_dependents = get_more_dependents(more_soup)
+                    more_dependents = get_more_dependents(more_soup, source_package)
                     return more_dependents
 
                 #TODO: increase logging
@@ -269,7 +281,7 @@ def get_dependents(soup):
                 for dep in deps:
                     dep_link = dep.get('href')
                     dep_name = dep.get_text()
-                    recorded_dependents.append(Package(name=dep_name, url=dep_link, dependents=[], lastCheckedOn=str(int(time.time()))))
+                    recorded_dependents.append(Package(name=dep_name, url=dep_link, sourced_from=[source_package], dependents=[], lastCheckedOn=str(int(time.time()))))
 
     return recorded_dependents
 
@@ -281,7 +293,7 @@ class Holder:
     package: Package
     complete: bool
 
-def get_more_dependents(soup):
+def get_more_dependents(soup, source_dependent):
     recorded_dependents = []
 
     # Get all the dependents listed on the page
@@ -297,7 +309,7 @@ def get_more_dependents(soup):
                 dep_name = None
                 if dep.find('h3'):
                     dep_name = dep.find('h3').get_text()
-                    holder.package = Package(name=dep_name, url=dep_link, dependents=[], lastCheckedOn=str(int(time.time())))
+                    holder.package = Package(name=dep_name, url=dep_link, sourced_from=[source_dependent], dependents=[], lastCheckedOn=str(int(time.time())))
                 else:
                     dep_name = dep.get_text()
                     if holder.package:
@@ -318,7 +330,7 @@ def get_more_dependents(soup):
             next_page_html_content = fetch_website_content(settings.npmBaseUrl + next_page_url)
             if next_page_html_content:
                 next_page_soup = parse_html(next_page_html_content)
-                more_dependents = get_more_dependents(next_page_soup)
+                more_dependents = get_more_dependents(next_page_soup, source_dependent)
                 recorded_dependents.extend(more_dependents)
                 break
         
