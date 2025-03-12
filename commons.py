@@ -61,9 +61,6 @@ class Author:
     url: Optional[str] = None
     imageUrl: Optional[str] = None
     is_maintainer: bool = False
-    monthlyDownloads: int = 0
-    weeklyDownloads: int = 0
-    depenents: int = 0
 
     @staticmethod
     def desearialize(data):
@@ -91,10 +88,7 @@ class Author:
                     lastCheckedOn=lastCheckedOn,
                     url=url,
                     imageUrl=imageUrl,
-                    is_maintainer=item.get("is_maintainer"),
-                    monthlyDownloads=item.get("monthlyDownloads"),
-                    weeklyDownloads=item.get("weeklyDownloads"),
-                    depenents=item.get("depenents")
+                    is_maintainer=item.get("is_maintainer")
                 )
             )
         return items_loaded

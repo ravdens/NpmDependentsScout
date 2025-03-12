@@ -3,7 +3,6 @@ from colorama import Fore, Style
 from bs4 import BeautifulSoup
 import requests
 from dataclasses import dataclass, asdict
-from typing import List, Optional
 import configparser
 import logging
 import time
@@ -138,18 +137,6 @@ def get_maintainers(package_name):
                             contributor.maintainer = False
                             break
 
-        # Get more data for each contributor
-        for contributor in authors:
-            user_url = f"https://registry.npmjs.org/{contributor.username}"
-            user_response = requests.get(user_url)
-            if user_response.status_code == 200:
-                user_data = user_response.json()
-                first_key = next(iter(user_data))
-                first_item = user_data[first_key]
-                contributor.monthlyDownloads = first_item["downloads"]["monthly"]
-                contributor.weeklyDownloads = first_item["downloads"]["weekly"]
-                contributor.depenents = first_item["downloads"]["depenents"]
-
         return authors
     else:
         logging.error(Fore.RED + f"Failed to fetch weekly downloads for {package_name}." + Style.RESET_ALL)
@@ -200,11 +187,12 @@ def get_dependents(soup):
                     recorded_dependents.append(Package(name=dep_name, url=dep_link, sourced_from=[source_package], dependents=[], lastCheckedOn=str(int(time.time()))))
     return recorded_dependents
 
-"""
-  Fast holder class used like tuple for cleaner calculations and pairing of relevant data in get_more_dependents()
-"""
+
 @dataclass
 class Holder:
+    """
+    Fast holder class used like tuple for cleaner calculations and pairing of relevant data in get_more_dependents()
+    """
     package: Package
     complete: bool
 
