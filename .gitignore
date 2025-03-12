@@ -3,3 +3,4 @@ exploreVenv/
 start.bat
 start.sh
 *.json
+*.pyc
